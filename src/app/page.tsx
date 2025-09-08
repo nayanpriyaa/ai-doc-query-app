@@ -1,103 +1,240 @@
-import Image from "next/image";
+// app/page.tsx
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FileUp, Send, Plus, MessageSquare, AlertCircle, CheckCircle2 } from 'lucide-react';
+
+// Define types
+type Message = { sender: 'user' | 'ai'; message: string };
+type Conversation = { id: number; created_at: string };
+// --- NEW: Type for our notification state ---
+type Notification = {
+  message: string;
+  type: 'success' | 'error';
+} | null;
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [question, setQuestion] = useState('');
+  const [chat, setChat] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  // --- NEW: State for on-page notifications ---
+  const [notification, setNotification] = useState<Notification>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Function to display a notification and clear it after some time
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => {
+      setNotification(null);
+    }, 5000); // Notification disappears after 5 seconds
+  };
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chat]);
+
+  useEffect(() => {
+    fetchConversations();
+  }, []);
+
+  const fetchConversations = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/conversations');
+      const data = await response.json();
+      setConversations(data);
+    } catch (error) { showNotification("Error fetching conversations.", 'error'); }
+  };
+  
+  const handleNewChat = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/new_chat', { method: 'POST' });
+      const data = await response.json();
+      setActiveConversationId(data.conversation_id);
+      setChat([]);
+      setFile(null);
+      setFileName('');
+      await fetchConversations();
+    } catch (error) { showNotification("Error starting new chat.", 'error'); }
+  };
+
+  const loadConversation = async (id: number) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/history/${id}`);
+      const data = await response.json();
+      setChat(data);
+      setActiveConversationId(id);
+      setFile(null);
+      setFileName('');
+    } catch (error) { showNotification("Error loading conversation.", 'error'); }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFile(e.target.files[0]);
+      setFileName(e.target.files[0].name);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file || !activeConversationId) {
+      showNotification("Please select a file and start a new chat first.", 'error');
+      return;
+    }
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/upload', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification(data.message || "File processed successfully!", 'success');
+      } else {
+        throw new Error(data.error || "Failed to upload file.");
+      }
+    } catch (error) {
+      showNotification(String(error), 'error');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleAskQuestion = async () => {
+    if (!question || !activeConversationId) return;
+    
+    const userMessage: Message = { sender: 'user', message: question };
+    setChat(prevChat => [...prevChat, userMessage]);
+    const currentQuestion = question;
+    setQuestion('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: currentQuestion, conversation_id: activeConversationId }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to get answer');
+      
+      const aiMessage: Message = { sender: 'ai', message: data.answer };
+      setChat(prevChat => [...prevChat, aiMessage]);
+    } catch (error) {
+      showNotification(String(error), 'error');
+      setChat(prev => prev.slice(0, -1)); // Remove the user's question if the API call failed
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- NEW: Notification Component ---
+  const NotificationComponent = () => {
+    if (!notification) return null;
+    const isError = notification.type === 'error';
+    return (
+      <div className={`p-3 rounded-md mb-4 flex items-center text-sm ${
+        isError ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+      }`}>
+        {isError ? <AlertCircle className="mr-2 h-5 w-5" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}
+        {notification.message}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex h-screen w-screen bg-white text-black">
+      {/* Sidebar */}
+      <aside className="w-72 border-r border-gray-200 p-4 flex flex-col">
+        {/* ... (sidebar code remains the same) ... */}
+        <h1 className="text-xl font-semibold mb-4">DocuChat</h1>
+        <Button onClick={handleNewChat} className="w-full mb-4">
+          <Plus className="mr-2 h-4 w-4" /> New Chat
+        </Button>
+        <div className="flex-grow overflow-y-auto">
+          {conversations.map((conv) => (
+            <Button
+              key={conv.id}
+              variant={activeConversationId === conv.id ? "secondary" : "ghost"}
+              onClick={() => loadConversation(conv.id)}
+              className="w-full justify-start mb-1"
+            >
+              <MessageSquare className="mr-2 h-4 w-4" /> Chat #{conv.id}
+            </Button>
+          ))}
         </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col">
+        {!activeConversationId ? (
+          <div className="flex-grow flex items-center justify-center text-gray-400">
+            Start a new chat from the sidebar
+          </div>
+        ) : (
+          <div className="flex flex-col h-full">
+            <header className="p-4 border-b border-gray-200">
+              {/* --- NEW: Place the notification component here --- */}
+              <NotificationComponent />
+              <div className="flex items-center gap-4">
+                <Input id="file-upload" type="file" onChange={handleFileChange} className="max-w-xs" />
+                <Button onClick={handleUpload} disabled={!file || isUploading} variant="outline">
+                  <FileUp className="mr-2 h-4 w-4" />
+                  {isUploading ? 'Uploading...' : 'Upload Document'}
+                </Button>
+                {fileName && <p className="text-sm text-gray-500">Current: {fileName}</p>}
+              </div>
+            </header>
+            
+            <div className="flex-grow p-6 overflow-y-auto">
+              <div className="max-w-3xl mx-auto">
+                {chat.map((msg, index) => (
+                  <div key={index} className={`flex items-start gap-3 my-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`p-3 rounded-lg max-w-lg ${
+                      msg.sender === 'user' ? 'bg-black text-white' : 'bg-gray-100'
+                    }`}>
+                      <p className="whitespace-pre-wrap">{msg.message}</p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+            </div>
+
+            <footer className="p-4 border-t border-gray-200">
+              <Card className="max-w-3xl mx-auto">
+                {/* ... (footer code remains the same) ... */}
+                <CardContent className="p-2">
+                  <div className="flex items-center gap-2">
+                    <Textarea
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isLoading && (e.preventDefault(), handleAskQuestion())}
+                      placeholder="Ask a question..."
+                      className="flex-grow resize-none border-0 shadow-none focus-visible:ring-0"
+                      disabled={isLoading}
+                    />
+                    <Button onClick={handleAskQuestion} disabled={isLoading || !question} size="icon">
+                      <Send className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </footer>
+          </div>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
