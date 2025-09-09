@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FileUp, Send, Plus, MessageSquare, AlertCircle, CheckCircle2, BookOpen } from 'lucide-react';
+import { FileUp, Send, Plus, MessageSquare, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 // Define types
-type Source = { content: string; page: number | string; };
-type Message = { sender: 'user' | 'ai'; message: string; sources?: Source[]; };
+type Message = { sender: 'user' | 'ai'; message: string };
 type Conversation = { id: number; created_at: string };
 type Notification = { message: string; type: 'success' | 'error'; } | null;
 
@@ -103,7 +102,9 @@ export default function Home() {
         throw new Error(data.error || "Failed to upload file.");
       }
     } catch (error) {
-      showNotification(String(error), 'error');
+      if (error instanceof Error) {
+        showNotification(error.message, 'error');
+      }
     } finally {
       setIsUploading(false);
     }
@@ -126,10 +127,12 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to get answer');
-      const aiMessage: Message = { sender: 'ai', message: data.answer, sources: data.sources };
+      const aiMessage: Message = { sender: 'ai', message: data.answer };
       setChat(prevChat => [...prevChat, aiMessage]);
     } catch (error) {
-      showNotification(String(error), 'error');
+      if (error instanceof Error) {
+        showNotification(error.message, 'error');
+      }
       setChat(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
@@ -196,24 +199,6 @@ export default function Home() {
                         <p className="whitespace-pre-wrap">{msg.message}</p>
                       </div>
                     </div>
-                    {msg.sender === 'ai' && msg.sources && msg.sources.length > 0 && (
-                      <div className="mt-2 w-full max-w-lg">
-                        <details className="text-xs">
-                          <summary className="cursor-pointer font-medium text-gray-500 flex items-center">
-                            <BookOpen className="h-4 w-4 mr-1"/> Sources ({msg.sources.length})
-                          </summary>
-                          <div className="mt-2 space-y-2">
-                            {msg.sources.map((source, idx) => (
-                              <Card key={idx} className="bg-gray-50 p-2 text-gray-600">
-                                <p className="truncate">
-                                  <b className="text-black">Page {source.page}:</b> &quot;{source.content}&quot;
-                                </p>
-                              </Card>
-                            ))}
-                          </div>
-                        </details>
-                      </div>
-                    )}
                   </div>
                 ))}
                 <div ref={chatEndRef} />

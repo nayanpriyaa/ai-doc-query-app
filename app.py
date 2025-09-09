@@ -1,9 +1,6 @@
-# app.py
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
+
 import os
-import sqlite3 # Import the sqlite3 library
+import sqlite3
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -22,20 +19,17 @@ app = Flask(__name__)
 CORS(app)
 
 vector_store = None
-chat_history = [] # Use a simple list to hold the current conversation's history
+chat_history = []
 
-# --- NEW: Database Setup ---
 def init_db():
     conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
-    # Create a table for conversations if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    # Create a table for messages if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +43,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- NEW: Endpoint to get a list of all conversations ---
 @app.route('/api/conversations', methods=['GET'])
 def get_conversations():
     conn = sqlite3.connect('chat_history.db')
@@ -60,7 +53,6 @@ def get_conversations():
     conn.close()
     return jsonify(conversations)
 
-# --- NEW: Endpoint to get history for a specific conversation ---
 @app.route('/api/history/<int:conversation_id>', methods=['GET'])
 def get_history(conversation_id):
     conn = sqlite3.connect('chat_history.db')
@@ -71,11 +63,10 @@ def get_history(conversation_id):
     conn.close()
     return jsonify(messages)
     
-# --- NEW: Endpoint to start a new chat ---
 @app.route('/api/new_chat', methods=['POST'])
 def new_chat():
     global chat_history
-    chat_history = [] # Clear the in-memory chat history
+    chat_history = []
     
     conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
@@ -88,7 +79,6 @@ def new_chat():
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    # ... (Your upload_file function remains the same) ...
     global vector_store
     
     if 'file' not in request.files:
@@ -112,15 +102,11 @@ def upload_file():
         except Exception as e:
             print(f"AN ERROR OCCURRED: {e}")
             return jsonify({"error": f"Error processing file: {str(e)}"}), 500
-# In app.py, replace the existing handle_query function with this one
-
-# In app.py, replace the entire handle_query function with this new one
 
 @app.route('/api/query', methods=['POST'])
 def handle_query():
     global vector_store, chat_history
-    print("--- Query received ---")
-
+    
     if vector_store is None:
         return jsonify({"error": "Document not uploaded or processed yet."}), 400
 
@@ -132,48 +118,19 @@ def handle_query():
         return jsonify({"error": "Missing question or conversation_id"}), 400
 
     try:
-        print("Step 1: Initializing LLM and retriever...")
         llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3)
         retriever = vector_store.as_retriever()
         
-        # --- NEW, MORE RELIABLE CHAIN SETUP ---
-        # This prompt ensures the AI answers based *only* on the provided context (the sources).
-        prompt = ChatPromptTemplate.from_template("""Answer the user's question based on the following context:
+        qa_chain = ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=retriever
+        )
         
-        <context>
-        {context}
-        </context>
-        
-        Question: {input}
-        """)
-
-        # This chain takes the question and the retrieved documents and generates an answer.
-        document_chain = create_stuff_documents_chain(llm, prompt)
-        
-        # This is the master chain. It retrieves documents first, then passes them to the document_chain.
-        retrieval_chain = create_retrieval_chain(retriever, document_chain)
-        
-        print("Step 2: Sending request to Gemini API...")
-        # The .invoke method returns a dictionary with 'answer' and 'context' (our sources).
-        result = retrieval_chain.invoke({"input": question})
-        print("Step 3: Received response from Gemini API.")
-        
+        result = qa_chain({"question": question, "chat_history": chat_history})
         answer = result['answer']
-        
-        # Extract the source documents from the 'context' key.
-        sources = []
-        if 'context' in result:
-            sources = [
-                {
-                    "content": doc.page_content,
-                    "page": doc.metadata.get('page', 'N/A')
-                } 
-                for doc in result['context']
-            ]
         
         chat_history.append((question, answer))
         
-        # Save to database (same as before)
         conn = sqlite3.connect('chat_history.db')
         cursor = conn.cursor()
         cursor.execute("INSERT INTO messages (conversation_id, sender, message) VALUES (?, ?, ?)",
@@ -183,7 +140,7 @@ def handle_query():
         conn.commit()
         conn.close()
         
-        return jsonify({"answer": answer, "sources": sources})
+        return jsonify({"answer": answer})
 
     except Exception as e:
         print(f"AN ERROR OCCURRED: {e}")
@@ -193,6 +150,5 @@ if __name__ == '__main__':
     init_db()
     if not os.path.exists('uploads'):
         os.makedirs('uploads')
-    # Use port provided by Render, default to 10000 for local testing
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
