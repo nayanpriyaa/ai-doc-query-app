@@ -1,4 +1,3 @@
-// app/page.tsx
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react'; // Added useCallback
@@ -35,13 +34,15 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat]);
 
-  // --- FIX: Wrapped fetchConversations in useCallback ---
+  // --- FIX: Wrapped fetchConversations in useCallback to satisfy the linter ---
   const fetchConversations = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:5000/api/conversations');
       const data = await response.json();
       setConversations(data);
-    } catch (error) { showNotification("Error fetching conversations.", 'error'); }
+    } catch (error) { 
+      showNotification("Error fetching conversations.", 'error'); 
+    }
   }, []);
 
   // --- FIX: Added fetchConversations to the dependency array ---
@@ -58,7 +59,9 @@ export default function Home() {
       setFile(null);
       setFileName('');
       await fetchConversations();
-    } catch (error) { showNotification("Error starting new chat.", 'error'); }
+    } catch (error) { 
+      showNotification("Error starting new chat.", 'error'); 
+    }
   };
 
   const loadConversation = async (id: number) => {
@@ -69,7 +72,9 @@ export default function Home() {
       setActiveConversationId(id);
       setFile(null);
       setFileName('');
-    } catch (error) { showNotification("Error loading conversation.", 'error'); }
+    } catch (error) { 
+      showNotification("Error loading conversation.", 'error'); 
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
