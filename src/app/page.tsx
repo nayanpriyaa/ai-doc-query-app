@@ -34,14 +34,13 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat]);
 
-  // Wrapped fetchConversations in useCallback
   const fetchConversations = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:5000/api/conversations');
       const data = await response.json();
       setConversations(data);
-    } catch {
-      showNotification("Error fetching conversations.", 'error');
+    } catch { // FIX: Removed unused 'error' variable
+      showNotification("Error fetching conversations.", 'error'); 
     }
   }, []);
 
@@ -58,8 +57,8 @@ export default function Home() {
       setFile(null);
       setFileName('');
       await fetchConversations();
-    } catch {
-      showNotification("Error starting new chat.", 'error');
+    } catch { // FIX: Removed unused 'error' variable
+      showNotification("Error starting new chat.", 'error'); 
     }
   };
 
@@ -71,8 +70,8 @@ export default function Home() {
       setActiveConversationId(id);
       setFile(null);
       setFileName('');
-    } catch {
-      showNotification("Error loading conversation.", 'error');
+    } catch { // FIX: Removed unused 'error' variable
+      showNotification("Error loading conversation.", 'error'); 
     }
   };
 
@@ -100,9 +99,8 @@ export default function Home() {
       } else {
         throw new Error(data.error || "Failed to upload file.");
       }
-    } catch (err) {
-      console.error(err);
-      showNotification("Error uploading file.", 'error');
+    } catch (error) {
+      showNotification(String(error), 'error');
     } finally {
       setIsUploading(false);
     }
@@ -127,9 +125,8 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Failed to get answer');
       const aiMessage: Message = { sender: 'ai', message: data.answer, sources: data.sources };
       setChat(prevChat => [...prevChat, aiMessage]);
-    } catch (err) {
-      console.error(err);
-      showNotification("Error getting AI response.", 'error');
+    } catch (error) {
+      showNotification(String(error), 'error');
       setChat(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
@@ -223,14 +220,7 @@ export default function Home() {
               <Card className="max-w-3xl mx-auto">
                 <CardContent className="p-2">
                   <div className="flex items-center gap-2">
-                    <Textarea
-                      value={question}
-                      onChange={(e) => setQuestion(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isLoading && (e.preventDefault(), handleAskQuestion())}
-                      placeholder="Ask a question..."
-                      className="flex-grow resize-none border-0 shadow-none focus-visible:ring-0"
-                      disabled={isLoading}
-                    />
+                    <Textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isLoading && (e.preventDefault(), handleAskQuestion())} placeholder="Ask a question..." className="flex-grow resize-none border-0 shadow-none focus-visible:ring-0" disabled={isLoading} />
                     <Button onClick={handleAskQuestion} disabled={isLoading || !question} size="icon">
                       <Send className="h-5 w-5" />
                     </Button>
