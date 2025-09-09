@@ -110,48 +110,70 @@ def upload_file():
         except Exception as e:
             print(f"AN ERROR OCCURRED: {e}")
             return jsonify({"error": f"Error processing file: {str(e)}"}), 500
+# In app.py, replace the existing handle_query function with this one
 
 @app.route('/api/query', methods=['POST'])
 def handle_query():
-    # ... (Your handle_query function is modified to save messages) ...
     global vector_store, chat_history
-    
+    print("--- Query received ---")
+
     if vector_store is None:
+        print("Error: Vector store is not initialized.")
         return jsonify({"error": "Document not uploaded or processed yet."}), 400
 
     data = request.get_json()
     question = data.get('question')
-    conversation_id = data.get('conversation_id') # Get conversation_id from frontend
+    conversation_id = data.get('conversation_id')
 
     if not question or not conversation_id:
+        print("Error: No question provided.")
         return jsonify({"error": "Missing question or conversation_id"}), 400
 
     try:
+        print("Step 1: Initializing LLM and retriever...")
         llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3)
         retriever = vector_store.as_retriever()
         
+        # --- THIS IS THE KEY CHANGE ---
+        # We set `return_source_documents=True` to get the source chunks back
         qa_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
-            retriever=retriever
+            retriever=retriever,
+            return_source_documents=True  # Ask the chain to return the source documents
         )
         
+        print("Step 2: Sending request to Gemini API...")
         result = qa_chain({"question": question, "chat_history": chat_history})
+        print("Step 3: Received response from Gemini API.")
+        
         answer = result['answer']
         
-        # Add the new question and answer to our in-memory history
+        # Extract the source documents from the result
+        sources = []
+        if 'source_documents' in result:
+            sources = [
+                {
+                    "content": doc.page_content,
+                    "page": doc.metadata.get('page', 'N/A') # Get page number if available
+                } 
+                for doc in result['source_documents']
+            ]
+        
         chat_history.append((question, answer))
         
-        # --- NEW: Save question and answer to the database ---
         conn = sqlite3.connect('chat_history.db')
         cursor = conn.cursor()
         cursor.execute("INSERT INTO messages (conversation_id, sender, message) VALUES (?, ?, ?)",
                        (conversation_id, 'user', question))
+        # Note: For simplicity, we're not saving sources to the DB, but you could extend this
         cursor.execute("INSERT INTO messages (conversation_id, sender, message) VALUES (?, ?, ?)",
                        (conversation_id, 'ai', answer))
         conn.commit()
         conn.close()
         
-        return jsonify({"answer": answer})
+        # --- ANOTHER KEY CHANGE ---
+        # Return the answer AND the sources to the frontend
+        return jsonify({"answer": answer, "sources": sources})
 
     except Exception as e:
         print(f"AN ERROR OCCURRED: {e}")

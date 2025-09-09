@@ -6,12 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FileUp, Send, Plus, MessageSquare, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FileUp, Send, Plus, MessageSquare, AlertCircle, CheckCircle2, BookOpen } from 'lucide-react';
 
-// Define types
-type Message = { sender: 'user' | 'ai'; message: string };
+// Define types for our data structures
+type Source = {
+  content: string;
+  page: number | string;
+};
+
+type Message = { 
+  sender: 'user' | 'ai'; 
+  message: string;
+  sources?: Source[]; // AI messages can now have sources
+};
+
 type Conversation = { id: number; created_at: string };
-// --- NEW: Type for our notification state ---
+
 type Notification = {
   message: string;
   type: 'success' | 'error';
@@ -29,7 +39,6 @@ export default function Home() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   
-  // --- NEW: State for on-page notifications ---
   const [notification, setNotification] = useState<Notification>(null);
 
   // Function to display a notification and clear it after some time
@@ -50,7 +59,7 @@ export default function Home() {
 
   const fetchConversations = async () => {
     try {
-      const response = await fetch('https://ai-doc-query-app.onrender.com/api/conversations');
+      const response = await fetch('http://localhost:5000/api/conversations');
       const data = await response.json();
       setConversations(data);
     } catch (error) { showNotification("Error fetching conversations.", 'error'); }
@@ -58,7 +67,7 @@ export default function Home() {
   
   const handleNewChat = async () => {
     try {
-      const response = await fetch('https://ai-doc-query-app.onrender.com/api/new_chat', { method: 'POST' });
+      const response = await fetch('http://localhost:5000/api/new_chat', { method: 'POST' });
       const data = await response.json();
       setActiveConversationId(data.conversation_id);
       setChat([]);
@@ -70,7 +79,7 @@ export default function Home() {
 
   const loadConversation = async (id: number) => {
     try {
-      const response = await fetch(`https://ai-doc-query-app.onrender.com/api/history/${id}`);
+      const response = await fetch(`http://localhost:5000/api/history/${id}`);
       const data = await response.json();
       setChat(data);
       setActiveConversationId(id);
@@ -96,7 +105,7 @@ export default function Home() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('https://ai-doc-query-app.onrender.com/api/upload', { method: 'POST', body: formData });
+      const response = await fetch('http://localhost:5000/api/upload', { method: 'POST', body: formData });
       const data = await response.json();
       if (response.ok) {
         showNotification(data.message || "File processed successfully!", 'success');
@@ -120,7 +129,7 @@ export default function Home() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('https://ai-doc-query-app.onrender.com/api/query', {
+      const response = await fetch('http://localhost:5000/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: currentQuestion, conversation_id: activeConversationId }),
@@ -129,7 +138,11 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to get answer');
       
-      const aiMessage: Message = { sender: 'ai', message: data.answer };
+      const aiMessage: Message = { 
+        sender: 'ai', 
+        message: data.answer,
+        sources: data.sources // Add sources from the backend response
+      };
       setChat(prevChat => [...prevChat, aiMessage]);
     } catch (error) {
       showNotification(String(error), 'error');
@@ -139,7 +152,7 @@ export default function Home() {
     }
   };
 
-  // --- NEW: Notification Component ---
+  // Notification Component
   const NotificationComponent = () => {
     if (!notification) return null;
     const isError = notification.type === 'error';
@@ -157,7 +170,6 @@ export default function Home() {
     <div className="flex h-screen w-screen bg-white text-black">
       {/* Sidebar */}
       <aside className="w-72 border-r border-gray-200 p-4 flex flex-col">
-        {/* ... (sidebar code remains the same) ... */}
         <h1 className="text-xl font-semibold mb-4">DocuChat</h1>
         <Button onClick={handleNewChat} className="w-full mb-4">
           <Plus className="mr-2 h-4 w-4" /> New Chat
@@ -185,7 +197,6 @@ export default function Home() {
         ) : (
           <div className="flex flex-col h-full">
             <header className="p-4 border-b border-gray-200">
-              {/* --- NEW: Place the notification component here --- */}
               <NotificationComponent />
               <div className="flex items-center gap-4">
                 <Input id="file-upload" type="file" onChange={handleFileChange} className="max-w-xs" />
@@ -198,14 +209,35 @@ export default function Home() {
             </header>
             
             <div className="flex-grow p-6 overflow-y-auto">
-              <div className="max-w-3xl mx-auto">
+              <div className="max-w-3xl mx-auto w-full">
                 {chat.map((msg, index) => (
-                  <div key={index} className={`flex items-start gap-3 my-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`p-3 rounded-lg max-w-lg ${
-                      msg.sender === 'user' ? 'bg-black text-white' : 'bg-gray-100'
-                    }`}>
-                      <p className="whitespace-pre-wrap">{msg.message}</p>
+                  <div key={index} className={`flex flex-col my-4 ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`flex items-start gap-3 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                      <div className={`p-3 rounded-lg max-w-lg ${
+                        msg.sender === 'user' ? 'bg-black text-white' : 'bg-gray-100'
+                      }`}>
+                        <p className="whitespace-pre-wrap">{msg.message}</p>
+                      </div>
                     </div>
+                    
+                    {msg.sender === 'ai' && msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-2 w-full max-w-lg">
+                        <details className="text-xs">
+                          <summary className="cursor-pointer font-medium text-gray-500 flex items-center">
+                            <BookOpen className="h-4 w-4 mr-1"/> Sources ({msg.sources.length})
+                          </summary>
+                          <div className="mt-2 space-y-2">
+                            {msg.sources.map((source, idx) => (
+                              <Card key={idx} className="bg-gray-50 p-2 text-gray-600">
+                                <p className="truncate">
+                                  <b className="text-black">Page {source.page}:</b> "{source.content}"
+                                </p>
+                              </Card>
+                            ))}
+                          </div>
+                        </details>
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div ref={chatEndRef} />
@@ -214,7 +246,6 @@ export default function Home() {
 
             <footer className="p-4 border-t border-gray-200">
               <Card className="max-w-3xl mx-auto">
-                {/* ... (footer code remains the same) ... */}
                 <CardContent className="p-2">
                   <div className="flex items-center gap-2">
                     <Textarea
