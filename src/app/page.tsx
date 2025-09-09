@@ -1,31 +1,18 @@
 // app/page.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react'; // Added useCallback
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUp, Send, Plus, MessageSquare, AlertCircle, CheckCircle2, BookOpen } from 'lucide-react';
 
-// Define types for our data structures
-type Source = {
-  content: string;
-  page: number | string;
-};
-
-type Message = { 
-  sender: 'user' | 'ai'; 
-  message: string;
-  sources?: Source[]; // AI messages can now have sources
-};
-
+// Define types
+type Source = { content: string; page: number | string; };
+type Message = { sender: 'user' | 'ai'; message: string; sources?: Source[]; };
 type Conversation = { id: number; created_at: string };
-
-type Notification = {
-  message: string;
-  type: 'success' | 'error';
-} | null;
+type Notification = { message: string; type: 'success' | 'error'; } | null;
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -34,36 +21,33 @@ export default function Home() {
   const [chat, setChat] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  
   const [notification, setNotification] = useState<Notification>(null);
 
-  // Function to display a notification and clear it after some time
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
-    setTimeout(() => {
-      setNotification(null);
-    }, 5000); // Notification disappears after 5 seconds
+    setTimeout(() => setNotification(null), 5000);
   };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat]);
 
-  useEffect(() => {
-    fetchConversations();
-  }, []);
-
-  const fetchConversations = async () => {
+  // --- FIX: Wrapped fetchConversations in useCallback ---
+  const fetchConversations = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:5000/api/conversations');
       const data = await response.json();
       setConversations(data);
     } catch (error) { showNotification("Error fetching conversations.", 'error'); }
-  };
+  }, []);
+
+  // --- FIX: Added fetchConversations to the dependency array ---
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
   
   const handleNewChat = async () => {
     try {
@@ -134,25 +118,18 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: currentQuestion, conversation_id: activeConversationId }),
       });
-
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to get answer');
-      
-      const aiMessage: Message = { 
-        sender: 'ai', 
-        message: data.answer,
-        sources: data.sources // Add sources from the backend response
-      };
+      const aiMessage: Message = { sender: 'ai', message: data.answer, sources: data.sources };
       setChat(prevChat => [...prevChat, aiMessage]);
     } catch (error) {
       showNotification(String(error), 'error');
-      setChat(prev => prev.slice(0, -1)); // Remove the user's question if the API call failed
+      setChat(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Notification Component
   const NotificationComponent = () => {
     if (!notification) return null;
     const isError = notification.type === 'error';
@@ -168,7 +145,6 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen bg-white text-black">
-      {/* Sidebar */}
       <aside className="w-72 border-r border-gray-200 p-4 flex flex-col">
         <h1 className="text-xl font-semibold mb-4">DocuChat</h1>
         <Button onClick={handleNewChat} className="w-full mb-4">
@@ -187,8 +163,6 @@ export default function Home() {
           ))}
         </div>
       </aside>
-
-      {/* Main Content */}
       <main className="flex-1 flex flex-col">
         {!activeConversationId ? (
           <div className="flex-grow flex items-center justify-center text-gray-400">
@@ -207,19 +181,15 @@ export default function Home() {
                 {fileName && <p className="text-sm text-gray-500">Current: {fileName}</p>}
               </div>
             </header>
-            
             <div className="flex-grow p-6 overflow-y-auto">
               <div className="max-w-3xl mx-auto w-full">
                 {chat.map((msg, index) => (
                   <div key={index} className={`flex flex-col my-4 ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
                     <div className={`flex items-start gap-3 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                      <div className={`p-3 rounded-lg max-w-lg ${
-                        msg.sender === 'user' ? 'bg-black text-white' : 'bg-gray-100'
-                      }`}>
+                      <div className={`p-3 rounded-lg max-w-lg ${ msg.sender === 'user' ? 'bg-black text-white' : 'bg-gray-100' }`}>
                         <p className="whitespace-pre-wrap">{msg.message}</p>
                       </div>
                     </div>
-                    
                     {msg.sender === 'ai' && msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2 w-full max-w-lg">
                         <details className="text-xs">
@@ -230,7 +200,8 @@ export default function Home() {
                             {msg.sources.map((source, idx) => (
                               <Card key={idx} className="bg-gray-50 p-2 text-gray-600">
                                 <p className="truncate">
-                                  <b className="text-black">Page {source.page}:</b> "{source.content}"
+                                  {/* --- FIX: Replaced quotes with HTML entities --- */}
+                                  <b className="text-black">Page {source.page}:</b> &quot;{source.content}&quot;
                                 </p>
                               </Card>
                             ))}
@@ -243,19 +214,11 @@ export default function Home() {
                 <div ref={chatEndRef} />
               </div>
             </div>
-
             <footer className="p-4 border-t border-gray-200">
               <Card className="max-w-3xl mx-auto">
                 <CardContent className="p-2">
                   <div className="flex items-center gap-2">
-                    <Textarea
-                      value={question}
-                      onChange={(e) => setQuestion(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isLoading && (e.preventDefault(), handleAskQuestion())}
-                      placeholder="Ask a question..."
-                      className="flex-grow resize-none border-0 shadow-none focus-visible:ring-0"
-                      disabled={isLoading}
-                    />
+                    <Textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isLoading && (e.preventDefault(), handleAskQuestion())} placeholder="Ask a question..." className="flex-grow resize-none border-0 shadow-none focus-visible:ring-0" disabled={isLoading} />
                     <Button onClick={handleAskQuestion} disabled={isLoading || !question} size="icon">
                       <Send className="h-5 w-5" />
                     </Button>
