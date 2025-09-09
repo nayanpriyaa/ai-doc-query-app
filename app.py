@@ -158,7 +158,9 @@ def handle_query():
         return jsonify({"error": f"Error getting answer: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    init_db() # Initialize the database when the server starts
+    init_db()
     if not os.path.exists('uploads'):
         os.makedirs('uploads')
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Use port provided by Render, default to 10000 for local testing
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
