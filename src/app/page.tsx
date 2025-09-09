@@ -12,7 +12,7 @@ type Message = { sender: 'user' | 'ai'; message: string };
 type Conversation = { id: number; created_at: string };
 type Notification = { message: string; type: 'success' | 'error'; } | null;
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = 'https://ai-doc-query-uyiq.onrender.com';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
