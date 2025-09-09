@@ -1,5 +1,7 @@
 # app.py
-
+from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 import os
 import sqlite3 # Import the sqlite3 library
 from dotenv import load_dotenv
@@ -112,13 +114,14 @@ def upload_file():
             return jsonify({"error": f"Error processing file: {str(e)}"}), 500
 # In app.py, replace the existing handle_query function with this one
 
+# In app.py, replace the entire handle_query function with this new one
+
 @app.route('/api/query', methods=['POST'])
 def handle_query():
     global vector_store, chat_history
     print("--- Query received ---")
 
     if vector_store is None:
-        print("Error: Vector store is not initialized.")
         return jsonify({"error": "Document not uploaded or processed yet."}), 400
 
     data = request.get_json()
@@ -126,7 +129,6 @@ def handle_query():
     conversation_id = data.get('conversation_id')
 
     if not question or not conversation_id:
-        print("Error: No question provided.")
         return jsonify({"error": "Missing question or conversation_id"}), 400
 
     try:
@@ -134,45 +136,53 @@ def handle_query():
         llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3)
         retriever = vector_store.as_retriever()
         
-        # --- THIS IS THE KEY CHANGE ---
-        # We set `return_source_documents=True` to get the source chunks back
-        qa_chain = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=retriever,
-            return_source_documents=True  # Ask the chain to return the source documents
-        )
+        # --- NEW, MORE RELIABLE CHAIN SETUP ---
+        # This prompt ensures the AI answers based *only* on the provided context (the sources).
+        prompt = ChatPromptTemplate.from_template("""Answer the user's question based on the following context:
+        
+        <context>
+        {context}
+        </context>
+        
+        Question: {input}
+        """)
+
+        # This chain takes the question and the retrieved documents and generates an answer.
+        document_chain = create_stuff_documents_chain(llm, prompt)
+        
+        # This is the master chain. It retrieves documents first, then passes them to the document_chain.
+        retrieval_chain = create_retrieval_chain(retriever, document_chain)
         
         print("Step 2: Sending request to Gemini API...")
-        result = qa_chain({"question": question, "chat_history": chat_history})
+        # The .invoke method returns a dictionary with 'answer' and 'context' (our sources).
+        result = retrieval_chain.invoke({"input": question})
         print("Step 3: Received response from Gemini API.")
         
         answer = result['answer']
         
-        # Extract the source documents from the result
+        # Extract the source documents from the 'context' key.
         sources = []
-        if 'source_documents' in result:
+        if 'context' in result:
             sources = [
                 {
                     "content": doc.page_content,
-                    "page": doc.metadata.get('page', 'N/A') # Get page number if available
+                    "page": doc.metadata.get('page', 'N/A')
                 } 
-                for doc in result['source_documents']
+                for doc in result['context']
             ]
         
         chat_history.append((question, answer))
         
+        # Save to database (same as before)
         conn = sqlite3.connect('chat_history.db')
         cursor = conn.cursor()
         cursor.execute("INSERT INTO messages (conversation_id, sender, message) VALUES (?, ?, ?)",
                        (conversation_id, 'user', question))
-        # Note: For simplicity, we're not saving sources to the DB, but you could extend this
         cursor.execute("INSERT INTO messages (conversation_id, sender, message) VALUES (?, ?, ?)",
                        (conversation_id, 'ai', answer))
         conn.commit()
         conn.close()
         
-        # --- ANOTHER KEY CHANGE ---
-        # Return the answer AND the sources to the frontend
         return jsonify({"answer": answer, "sources": sources})
 
     except Exception as e:
