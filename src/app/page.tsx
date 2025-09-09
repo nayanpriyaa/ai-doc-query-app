@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat]);
 
-  // --- FIX: Wrapped fetchConversations in useCallback to satisfy the linter ---
+  // FIX: Wrapped fetchConversations in useCallback to satisfy the linter
   const fetchConversations = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:5000/api/conversations');
@@ -45,7 +45,7 @@ export default function Home() {
     }
   }, []);
 
-  // --- FIX: Added fetchConversations to the dependency array ---
+  // FIX: Added fetchConversations to the dependency array
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
@@ -237,3 +237,4 @@ export default function Home() {
     </div>
   );
 }
+
