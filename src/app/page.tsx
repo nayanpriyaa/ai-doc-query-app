@@ -36,11 +36,11 @@ export default function Home() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/conversations');
+      const response = await fetch('https://ai-doc-query-backend.onrender.com/api/conversations');
       const data = await response.json();
       setConversations(data);
-    } catch { // FIX: Removed unused 'error' variable
-      showNotification("Error fetching conversations.", 'error'); 
+    } catch {
+      showNotification("Error fetching conversations.", 'error');
     }
   }, []);
 
@@ -50,28 +50,28 @@ export default function Home() {
   
   const handleNewChat = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/new_chat', { method: 'POST' });
+      const response = await fetch('https://ai-doc-query-backend.onrender.com/api/new_chat', { method: 'POST' });
       const data = await response.json();
       setActiveConversationId(data.conversation_id);
       setChat([]);
       setFile(null);
       setFileName('');
       await fetchConversations();
-    } catch { // FIX: Removed unused 'error' variable
-      showNotification("Error starting new chat.", 'error'); 
+    } catch {
+      showNotification("Error starting new chat.", 'error');
     }
   };
 
   const loadConversation = async (id: number) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/history/${id}`);
+      const response = await fetch(`https://ai-doc-query-backend.onrender.com/api/history/${id}`);
       const data = await response.json();
       setChat(data);
       setActiveConversationId(id);
       setFile(null);
       setFileName('');
-    } catch { // FIX: Removed unused 'error' variable
-      showNotification("Error loading conversation.", 'error'); 
+    } catch {
+      showNotification("Error loading conversation.", 'error');
     }
   };
 
@@ -92,7 +92,7 @@ export default function Home() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:5000/api/upload', { method: 'POST', body: formData });
+      const response = await fetch('https://ai-doc-query-backend.onrender.com/api/upload', { method: 'POST', body: formData });
       const data = await response.json();
       if (response.ok) {
         showNotification(data.message || "File processed successfully!", 'success');
@@ -116,7 +116,7 @@ export default function Home() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/query', {
+      const response = await fetch('https://ai-doc-query-backend.onrender.com/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: currentQuestion, conversation_id: activeConversationId }),
